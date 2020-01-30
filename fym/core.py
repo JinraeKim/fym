@@ -18,7 +18,7 @@ class BaseEnv(gym.Env):
                  name=None):
         self.name = name
         self.systems_dict = systems_dict
-        self.systems = systems_dict.values()
+        self.systems = list(systems_dict.values())
         self.state_shape = (sum([
             functools.reduce(lambda a, b: a * b, system.state_shape)
             for system in self.systems

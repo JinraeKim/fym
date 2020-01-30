@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import multiprocessing as mp
+import ray
 
 import fym
 import fym.core as core
@@ -79,46 +80,91 @@ class Aircraft(core.BaseEnv):
         f16.dot = f16.deriv(f16.state, action)
 
 
-def collect_samples(env, agent, num):
+def collect_samples(obs, env, agent):
     obs_list = []
     action_list = []
     masks = []
     reward_list = []
 
-    for i in range(num):
-        obs = env.reset()
+    # obs = env.reset()
+    # obs = np.zeros(7)
+    while True:
+        action = agent.select_action(obs)
+        next_obs, reward, done, info = env.step(action)
 
-        while True:
-            action = agent.select_action(obs)
-            next_obs, reward, done, info = env.step(action)
+        obs_list.append(obs)
+        action_list.append(action)
+        masks.append(0 if done else 1)
+        reward_list.append(reward)
 
-            obs_list.append(obs)
-            action_list.append(action)
-            masks.append(0 if done else 1)
-            reward_list.append(reward)
+        obs = next_obs
 
-            obs = next_obs
+        if done:
+            break
 
-            if done:
-                break
+    return np.stack(obs_list), np.stack(action_list), masks, reward_list
+
+
+@ray.remote
+def ray_collect_samples(obs, env, agent):
+    obs_list = []
+    action_list = []
+    masks = []
+    reward_list = []
+
+    # obs = env.reset()
+    # obs = np.zeros(7)
+    while True:
+        action = agent.select_action(obs)
+        next_obs, reward, done, info = env.step(action)
+
+        obs_list.append(obs)
+        action_list.append(action)
+        masks.append(0 if done else 1)
+        reward_list.append(reward)
+
+        obs = next_obs
+
+        if done:
+            break
 
     return np.stack(obs_list), np.stack(action_list), masks, reward_list
 
 
 def parallel_collect_samples(env, agent, num=2):
     pool = mp.Pool()
-    args_list = [(env, agent, 1) for _ in range(num)]
+    args_list = [(env, agent) for _ in range(num)]
     for i in range(num):
         args_list[i][0].reset()
     # results = pool.starmap_async(collect_samples, args_list)
-    results = [pool.apply(collect_samples, args=(env, agent, 1)) for _ in range(num)]
+    results = [pool.apply(collect_samples, args=(args_list[i][0], args_list[i][1])) for _ in range(num)]
     return results
 
 
 if __name__ == "__main__":
-    env = Aircraft(logging_off=True)
-    agent = Lqr(env.systems_dict['f16'])
+    seed = 1
+    # Seeding
+    np.random.seed(seed)
+    num_iter = 2
 
-    t0 = time.time()
-    collect_samples(env, agent, 1)
-    parallel_collect_samples(env, agent, num=1)
+    # not parallel
+    env = Aircraft(logging_off=True, rand_init=False)
+    agent = Lqr(env.systems_dict['f16'])
+    obs = env.reset()
+    results_original = collect_samples(obs, env, agent)
+
+    # parallel - ray
+    obs = env.reset()
+
+    ray.init()
+    for _ in range(num_iter):
+        inputs = ray.put(env, agent)
+        futures = [ray_collect_samples.remote(obs, env, agent) for _ in range(1)]
+        results_ray = ray.get(futures)
+
+    print("original = {}".format(results_original[0]))
+    print("ray = {}".format(results_ray[0][0]))
+    # # parallel - multiprocessing
+    # env = Aircraft(logging_off=True)
+    # agent = Lqr(env.systems_dict['f16'])
+    # parallel_collect_samples(env, agent, num=num_iter)
