@@ -40,7 +40,7 @@ def _plot3d(figs, fig_name, fig_dict, data_dict, weight_dict):
         X, Y, Z = w_x*data_x, w_y*data_y, w_z*data_z
         # plot properties
         plot_property_dict = {}
-        for key in ["c", "label", "alpha"]:
+        for key in ["c", "label", "alpha", "s"]:
             plot_property_dict[key] = _get_plot_property(fig_dict, key, i_plt)
         plot_type = fig_dict.get("type")
         if plot_type is None:
@@ -104,7 +104,7 @@ def _plot2d(figs, fig_name, fig_dict, data_dict, weight_dict):
             X, Y = w_x*data_x, w_y*data_y[:, i]
             # plot properties
             plot_property_dict = {}
-            for key in ["c", "label", "alpha"]:
+            for key in ["c", "label", "alpha", "s"]:
                 plot_property_dict[key] = _get_plot_property(fig_dict, key, i_plt)
             plot_type = fig_dict.get("type")
             if plot_type is None:
